@@ -96,7 +96,7 @@ export default function Preloader() {
                 playsInline
                 preload="auto"
                 className="absolute inset-0 w-full h-full object-cover opacity-70 pointer-events-none"
-                src="/videos/WebsiteLoaderVideo.mp4"
+                src="https://7aop7sgroelxkagz.public.blob.vercel-storage.com/Website%20Loader%20Video.mp4"
             />
 
             {/* Radial Vignette Overlay */}
