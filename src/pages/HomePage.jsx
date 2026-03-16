@@ -1,0 +1,680 @@
+'use client';
+
+import { useLayoutEffect, useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import Image from '../components/common/Image';
+import gsap from 'gsap';
+import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
+if (typeof window !== 'undefined') {
+  gsap.registerPlugin(ScrollTrigger);
+}
+
+export default function HomePage() {
+  const mainRef = useRef(null);
+  const showreelSectionRef = useRef(null);
+  const videoBoxRef = useRef(null);
+  const showreelTitleRef = useRef(null);
+  const verveTextRef = useRef(null);
+  const heroRef = useRef(null);
+
+  // Custom Video Player States
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playedFraction, setPlayedFraction] = useState(0);
+  const [isSeeking, setIsSeeking] = useState(false);
+  const [volume, setVolume] = useState(0.8);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isReady, setIsReady] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+
+  // Raw YouTube API Refs
+  const playerDivRef = useRef(null);
+  const ytPlayerRef = useRef(null);
+
+  // 1. Initialize Native YouTube IFrame API
+  useEffect(() => {
+    const loadYouTubeAPI = () => {
+      ytPlayerRef.current = new window.YT.Player(playerDivRef.current, {
+        videoId: 'bipYaBqAnsY', // Your video ID
+        playerVars: {
+          controls: 0,
+          disablekb: 1,
+          modestbranding: 1,
+          rel: 0,
+          showinfo: 0,
+          playsinline: 1,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: (event) => {
+            setIsReady(true);
+            event.target.setVolume(volume * 100);
+          },
+          onStateChange: (event) => {
+            // YT.PlayerState.PLAYING = 1, PAUSED = 2, ENDED = 0
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              setIsPlaying(true);
+            } else if (event.data === window.YT.PlayerState.PAUSED || event.data === window.YT.PlayerState.ENDED) {
+              setIsPlaying(false);
+            }
+          }
+        }
+      });
+    };
+
+    if (window.YT && window.YT.Player) {
+      loadYouTubeAPI();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://www.youtube.com/iframe_api';
+      document.body.appendChild(script);
+      window.onYouTubeIframeAPIReady = loadYouTubeAPI;
+    }
+
+    return () => {
+      if (ytPlayerRef.current && ytPlayerRef.current.destroy) {
+        ytPlayerRef.current.destroy();
+      }
+    };
+  }, []);
+
+  // 2. Custom Progress Tracker
+  useEffect(() => {
+    let interval;
+    if (isPlaying && !isSeeking && ytPlayerRef.current && ytPlayerRef.current.getCurrentTime) {
+      interval = setInterval(() => {
+        const currentTime = ytPlayerRef.current.getCurrentTime();
+        const duration = ytPlayerRef.current.getDuration();
+        if (duration > 0) {
+          setPlayedFraction(currentTime / duration);
+        }
+      }, 500);
+    }
+    return () => clearInterval(interval);
+  }, [isPlaying, isSeeking]);
+
+  // 3. Control Handlers
+  const handlePlayPause = () => {
+    if (isTransitioning || !ytPlayerRef.current) return; 
+    
+    setIsTransitioning(true);
+    
+    if (isPlaying) {
+      ytPlayerRef.current.pauseVideo();
+    } else {
+      ytPlayerRef.current.playVideo();
+    }
+    
+    setTimeout(() => {
+      setIsTransitioning(false);
+    }, 400); 
+  };
+
+  const handleSeekMouseDown = () => setIsSeeking(true);
+
+  const handleSeekChange = (e) => {
+    setPlayedFraction(parseFloat(e.target.value));
+  };
+
+  const handleSeekMouseUp = (e) => {
+    setIsSeeking(false);
+    if (ytPlayerRef.current && ytPlayerRef.current.getDuration) {
+      const duration = ytPlayerRef.current.getDuration();
+      const seekTime = parseFloat(e.target.value) * duration;
+      ytPlayerRef.current.seekTo(seekTime, true);
+    }
+  };
+
+  const handleVolumeChange = (e) => {
+    const newVol = parseFloat(e.target.value);
+    setVolume(newVol);
+    if (newVol > 0) setIsMuted(false);
+    if (ytPlayerRef.current && ytPlayerRef.current.setVolume) {
+      ytPlayerRef.current.setVolume(newVol * 100);
+    }
+  };
+
+  const toggleMute = () => {
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    if (ytPlayerRef.current) {
+      if (nextMuted) {
+        ytPlayerRef.current.mute();
+      } else {
+        ytPlayerRef.current.unMute();
+        ytPlayerRef.current.setVolume(volume * 100);
+      }
+    }
+  };
+
+  // GSAP Animations
+  useLayoutEffect(() => {
+    const timer = setTimeout(() => {
+      const ctx = gsap.context(() => {
+        const tl = gsap.timeline({
+          scrollTrigger: {
+            trigger: showreelSectionRef.current,
+            start: "top top",
+            end: "+=200%",
+            pin: true,
+            scrub: 1,
+            anticipatePin: 1,
+          }
+        });
+
+        // Expand the Video Box to Full Screen
+        tl.to(videoBoxRef.current, {
+          width: "100vw",
+          height: "100vh",
+          top: "0%",
+          borderRadius: "0px",
+          ease: "power2.inOut",
+        }, 0);
+
+        // Parallax the "SHOWREEL" text
+        tl.to(showreelTitleRef.current, {
+          y: -100,
+          opacity: 0.5,
+          ease: "power2.inOut",
+        }, 0);
+
+        // "VERVE" Text inside video scaling
+        tl.to(verveTextRef.current, {
+          scale: 1.5,
+          opacity: 0,
+          ease: "power2.inOut",
+        }, 0);
+
+        // Hide Hero on Scroll
+        if (heroRef.current) {
+          gsap.to(heroRef.current, {
+            scrollTrigger: {
+              trigger: showreelSectionRef.current,
+              start: "top 80%",
+              end: "top 20%",
+              scrub: true,
+            },
+            opacity: 0,
+            visibility: "hidden",
+            ease: "none"
+          });
+        }
+      }, mainRef);
+
+      ScrollTrigger.refresh();
+
+      return () => ctx.revert();
+    }, 100);
+
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div ref={mainRef} className="relative bg-black min-h-screen text-white font-sans selection:bg-red-600 selection:text-white">
+
+      {/* HERO SECTION */}
+      <section ref={heroRef} className="fixed top-0 left-0 w-full h-screen flex flex-col items-center justify-center overflow-hidden z-0">
+        <div
+          className="absolute bottom-0 right-0 w-[40vw] h-[60vh] pointer-events-none origin-bottom-right opacity-60 blur-[100px] z-0"
+          style={{ background: 'linear-gradient(to top left, #a30800 0%, #ff1a1a 20%, transparent 60%)' }}
+        ></div>
+
+        <div className="relative z-10 text-center px-[clamp(1.5rem,4vw,3rem)] max-w-7xl mx-auto pt-10">
+          <h1 className="text-[clamp(2.5rem,6vw+1rem,5.5rem)] font-bold tracking-tight leading-[1.1] text-white uppercase mb-[clamp(1.5rem,4vw,2rem)]">
+            Explore the true potential <br />
+            <span className="text-neutral-400">of your brand</span>
+          </h1>
+
+          <p className="text-[clamp(0.875rem,2vw,1.125rem)] text-neutral-400 max-w-2xl mx-auto mb-[clamp(2rem,5vw,3rem)] font-medium leading-relaxed">
+            We help Mumbai brands grow through video-led marketing that turns attention into engagement, leads, and revenue.
+          </p>
+          <Link
+            to="/contact"
+            className="inline-block px-[clamp(2rem,5vw,2.5rem)] py-[clamp(0.75rem,2vw,1rem)] rounded-full border border-white/20 bg-white/5 backdrop-blur-sm hover:bg-white hover:text-black transition-all duration-300 group"
+          >
+            <span className="text-[clamp(0.75rem,1.5vw,0.875rem)] font-bold tracking-widest uppercase">Contact Us</span>
+          </Link>
+        </div>
+      </section>
+
+      {/* SCROLLABLE CONTENT WRAPPER */}
+      <div className="relative z-10 mt-[100vh] bg-black shadow-[0_-50px_100px_rgba(0,0,0,1)]">
+
+        {/* SHOWREEL ANIMATION SECTION */}
+        <section ref={showreelSectionRef} className="h-screen w-full relative bg-black overflow-hidden group/section">
+
+          {/* 1. Showreel Title */}
+          <h2
+            ref={showreelTitleRef}
+            className="absolute top-[20%] md:top-[15%] left-1/2 -translate-x-1/2 text-[clamp(2.5rem,14vw,18rem)] font-bold text-white uppercase tracking-tighter leading-none whitespace-nowrap z-30 select-none pointer-events-none mix-blend-difference"
+          >
+            Showreel
+          </h2>
+
+          {/* 2. Video Box Container */}
+          {/* CRITICAL FIX: Removed border class and added will-change to prevent GSAP scrolling jitter */}
+          <div
+            ref={videoBoxRef}
+            className="absolute top-[50%] md:top-[55%] left-1/2 -translate-x-1/2 w-[90vw] md:w-[60vw] lg:w-[50vw] h-[30vh] md:h-[35vh] lg:h-[45vh] z-30 bg-neutral-900 overflow-hidden rounded-[clamp(1rem,3vw,2rem)] flex items-center justify-center shadow-2xl relative group/player"
+            style={{ willChange: 'width, height, top' }}
+          >
+
+            {/* The Raw YouTube IFrame Wrapper */}
+            <div className={`absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-700 ${isPlaying ? 'opacity-100' : 'opacity-0'}`}>
+              <div className="w-full h-full transform scale-[1.2]">
+                {/* The YouTube API will target this empty div and replace it with the <iframe> */}
+                <div ref={playerDivRef} className="w-full h-full" />
+              </div>
+            </div>
+
+            {/* Subtle Black Overlay to make text pop when paused */}
+            <div className={`absolute inset-0 bg-black/50 pointer-events-none transition-opacity duration-500 z-10 ${isPlaying ? 'opacity-0' : 'opacity-100'}`}></div>
+
+            {/* VERVE Overlay Text & Big Play Button (Visible when paused) */}
+            <div className={`absolute inset-0 flex items-center justify-center z-20 transition-opacity duration-500 ${isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
+              
+              {/* VERVE Text
+              <h3
+                ref={verveTextRef}
+                className="absolute text-[clamp(1.5rem,8vw,10rem)] font-black text-white/50 tracking-tighter uppercase stroke-text pointer-events-none"
+              >
+                VERVE
+              </h3> */}
+
+              {/* Big Center Play Button */}
+              <button 
+                onClick={handlePlayPause}
+                disabled={!isReady || isTransitioning}
+                className={`relative z-30 w-[clamp(3rem,8vw,4rem)] h-[clamp(3rem,8vw,4rem)] rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 transition-all duration-300 ${isReady ? 'hover:bg-white/20 hover:scale-110 cursor-pointer' : 'opacity-50 cursor-wait'}`}
+              >
+                <div className="w-0 h-0 border-t-[clamp(4px,1vw,8px)] border-t-transparent border-l-[clamp(8px,2vw,14px)] border-l-white border-b-[clamp(4px,1vw,8px)] border-b-transparent ml-1"></div>
+              </button>
+            </div>
+
+            {/* Custom Bottom Media Controls (Visible when playing) */}
+            <div className={`absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-[clamp(1rem,2vw,1.5rem)] flex items-center gap-[clamp(0.75rem,2vw,1.5rem)] z-40 transition-all duration-500 ${isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
+              
+              <button onClick={handlePlayPause} disabled={isTransitioning} className="text-white hover:text-red-500 transition-colors cursor-pointer flex-shrink-0">
+                {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
+              </button>
+
+              {/* Draggable Progress Bar */}
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step="any"
+                value={playedFraction}
+                onMouseDown={handleSeekMouseDown}
+                onChange={handleSeekChange}
+                onMouseUp={handleSeekMouseUp}
+                onTouchStart={handleSeekMouseDown}
+                onTouchEnd={handleSeekMouseUp}
+                className="flex-grow h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-red-600 focus:outline-none focus:ring-2 focus:ring-red-600/50"
+              />
+
+              {/* Volume Controls */}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <button onClick={toggleMute} className="text-white hover:text-red-500 transition-colors hidden sm:block cursor-pointer">
+                  {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
+                </button>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step="any"
+                  value={isMuted ? 0 : volume}
+                  onChange={handleVolumeChange}
+                  className="w-16 h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-red-600 hidden sm:block focus:outline-none focus:ring-2 focus:ring-red-600/50"
+                />
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+        {/* TRUSTED BY SECTION */}
+        <TrustedBySection />
+
+        {/* ABOUT US SECTION */}
+        <AboutUsSection />
+
+        {/* OUR SERVICES SECTION */}
+        <ServicesSection />
+
+        {/* STATS BAR SECTION */}
+        <StatsBarSection />
+
+      </div>
+    </div>
+  );
+}
+
+// ----------------------------------------------------------------------
+// TRUSTED BY SECTION
+// ----------------------------------------------------------------------
+const trustedPeople = [
+  "https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1573496359-136d919d7402?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1000&auto=format&fit=crop",
+  "https://images.unsplash.com/photo-1598550832205-d07e46633783?q=80&w=1000&auto=format&fit=crop",
+];
+
+function TrustedBySection() {
+  return (
+    <section className="w-full bg-black py-[clamp(4rem,10vw,6rem)] border-t border-white/5 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-[clamp(1.5rem,4vw,3rem)] mb-[clamp(3rem,8vw,4rem)]">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-[clamp(2rem,5vw,3rem)]">
+          <div className="max-w-3xl">
+            <div className="flex items-center gap-3 mb-[clamp(1rem,3vw,1.5rem)]">
+              <svg className="w-[clamp(1rem,2vw,1.25rem)] h-[clamp(1rem,2vw,1.25rem)] text-red-600 fill-current" viewBox="0 0 24 24">
+                <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
+              </svg>
+              <span className="text-neutral-400 uppercase tracking-widest text-[clamp(0.75rem,1.5vw,0.875rem)] font-medium">Clients</span>
+            </div>
+            <h2 className="text-[clamp(2.5rem,6vw,4.5rem)] font-bold text-white leading-[1.1]">
+              <span className="text-red-600 italic font-serif pr-3 relative inline-block">
+                Trusted
+                <svg className="absolute -bottom-[clamp(0.25rem,1vw,0.5rem)] left-0 w-full h-[clamp(0.25rem,1vw,0.5rem)] text-red-600/30" viewBox="0 0 100 10" preserveAspectRatio="none">
+                  <path d="M0 5 Q 50 10 100 5" stroke="currentColor" strokeWidth="2" fill="none" />
+                </svg>
+              </span>
+              by People <br /> from various industries
+            </h2>
+          </div>
+          <div className="max-w-md text-neutral-400 text-[clamp(1rem,2vw,1.125rem)] leading-relaxed mb-2">
+            Meet the people who didn’t just partner with us they grew with us. From different industries to common ambitions, these voices show what trust can truly build.
+          </div>
+        </div>
+      </div>
+
+      <div className="flex overflow-hidden pb-4">
+        <div className="flex animate-trusted-marquee gap-[clamp(1.5rem,3vw,2rem)] pl-[clamp(1.5rem,4vw,3rem)]">
+          {[...trustedPeople, ...trustedPeople].map((src, i) => (
+            // Switched fixed pixel sizes to fluid clamps using rem units
+            <div key={i} className="relative w-[clamp(16rem,40vw,21.875rem)] h-[clamp(22rem,55vw,28.125rem)] flex-shrink-0 rounded-[clamp(1.5rem,4vw,2rem)] overflow-hidden border border-white/10 grayscale hover:grayscale-0 transition-all duration-500 group cursor-pointer">
+              <Image
+                src={src}
+                alt="Client"
+                fill
+                className="object-cover transform group-hover:scale-110 transition-transform duration-700"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes trusted-marquee {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+        }
+        .animate-trusted-marquee {
+            animation: trusted-marquee 40s linear infinite;
+        }
+        .animate-trusted-marquee:hover {
+            animation-play-state: paused;
+        }
+      `}</style>
+    </section>
+  );
+}
+
+// ----------------------------------------------------------------------
+// ABOUT US SECTION (Static Version)
+// ----------------------------------------------------------------------
+function AboutUsSection() {
+  return (
+    <section className="w-full bg-black px-[clamp(1.5rem,4vw,3rem)] py-[clamp(4rem,10vw,6rem)] border-t border-white/5">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-center gap-[clamp(3rem,8vw,4rem)]">
+        <div className="md:w-5/12 max-w-2xl flex flex-col justify-center">
+          <div className="flex items-center gap-3 mb-[clamp(1.5rem,4vw,2rem)]">
+            <svg className="w-[clamp(1rem,2vw,1.25rem)] h-[clamp(1rem,2vw,1.25rem)] text-red-600 fill-current" viewBox="0 0 24 24">
+              <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
+            </svg>
+            <span className="text-neutral-400 uppercase tracking-widest text-[clamp(0.75rem,1.5vw,0.875rem)] font-medium">About Us</span>
+          </div>
+
+          <div className="mb-[clamp(2rem,5vw,3rem)]">
+            <h4 className="text-[clamp(1.75rem,4vw,2.5rem)] font-bold mb-[clamp(1.5rem,4vw,2rem)] text-white leading-tight">
+              Get Nitty Gritty: Where Vision Meets Results.
+            </h4>
+            <div className="space-y-[clamp(1rem,3vw,1.5rem)]">
+              <p className="text-[clamp(1rem,2vw,1.25rem)] text-neutral-400 leading-relaxed font-light">
+                We combine creative storytelling with strategic production and digital expertise to help brands build visibility, generate leads, and sustain growth.
+              </p>
+              <p className="text-[clamp(1rem,2vw,1.25rem)] text-neutral-400 leading-relaxed font-light">
+                We strengthen your digital presence via strategic social media, targeted campaigns, lead generation, and audience engagement—turning interest into loyalty and sustained growth.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <Link to="/about" className="inline-block px-[clamp(2rem,5vw,2.5rem)] py-[clamp(0.5rem,1.5vw,0.75rem)] rounded-full border border-white/20 text-[clamp(0.7rem,1vw,0.75rem)] uppercase tracking-widest text-white hover:bg-white hover:text-black transition-all duration-300">
+              Read More
+            </Link>
+          </div>
+        </div>
+
+        <div className="md:w-1/2 grid grid-cols-2 gap-x-[clamp(1rem,4vw,2rem)] gap-y-[clamp(2rem,6vw,4rem)] content-center">
+          <div>
+            <span className="block text-[clamp(3rem,6vw,4.5rem)] font-bold text-white mb-[clamp(0.25rem,1vw,0.75rem)]">
+              300+
+            </span>
+            <span className="text-[clamp(0.65rem,1vw,0.75rem)] text-neutral-500 uppercase tracking-[0.2em] font-medium">Films</span>
+          </div>
+          <div>
+            <span className="block text-[clamp(3rem,6vw,4.5rem)] font-bold text-white mb-[clamp(0.25rem,1vw,0.75rem)]">
+              250+
+            </span>
+            <span className="text-[clamp(0.65rem,1vw,0.75rem)] text-neutral-500 uppercase tracking-[0.2em] font-medium">Brands</span>
+          </div>
+          <div>
+            <span className="block text-[clamp(3rem,6vw,4.5rem)] font-bold text-white mb-[clamp(0.25rem,1vw,0.75rem)]">
+              100+
+            </span>
+            <span className="text-[clamp(0.65rem,1vw,0.75rem)] text-neutral-500 uppercase tracking-[0.2em] font-medium">Websites</span>
+          </div>
+          <div>
+            <span className="block text-[clamp(3rem,6vw,4.5rem)] font-bold text-white mb-[clamp(0.25rem,1vw,0.75rem)]">
+              10+
+            </span>
+            <span className="text-[clamp(0.65rem,1vw,0.75rem)] text-neutral-500 uppercase tracking-[0.2em] font-medium">Awards</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ----------------------------------------------------------------------
+// STATS BAR SECTION
+// ----------------------------------------------------------------------
+function StatsBarSection() {
+  const stats = [
+    { icon: <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" />, value: '300+', label: 'Films Produced' },
+    { icon: <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />, value: '250+', label: 'Brands Served' },
+    { icon: <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12zM6 10h2v2H6zm0 4h8v2H6zm10 0h2v2h-2zm-6-4h8v2h-8z" />, value: '100+', label: 'Websites Built' },
+    { icon: <path d="M19 5h-2V3H7v2H5c-1.1 0-2 .9-2 2v1c0 2.55 1.92 4.63 4.39 4.94.63 1.5 1.98 2.63 3.61 2.96V19H7v2h10v-2h-4v-3.1c1.63-.33 2.98-1.46 3.61-2.96C19.08 12.63 21 10.55 21 8V7c0-1.1-.9-2-2-2zM5 8V7h2v3.82C5.84 10.4 5 9.3 5 8zm14 0c0 1.3-.84 2.4-2 2.82V7h2v1z" />, value: '10+', label: 'Awards Won' },
+  ];
+  return (
+    <section className="w-full bg-black border-t border-white/10 py-[clamp(2.5rem,6vw,4rem)]">
+      <div className="max-w-7xl mx-auto px-[clamp(1.5rem,4vw,3rem)]">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-[clamp(2rem,4vw,0rem)] md:gap-0 md:divide-x md:divide-white/10">
+          {stats.map((s, i) => (
+            <div key={i} className="flex flex-col items-center gap-[clamp(0.5rem,2vw,1rem)] px-[clamp(1rem,2vw,2rem)]">
+              <svg className="w-[clamp(2rem,4vw,2.5rem)] h-[clamp(2rem,4vw,2.5rem)] text-white opacity-70" viewBox="0 0 24 24" fill="currentColor">
+                {s.icon}
+              </svg>
+              <div className="text-center">
+                <p className="text-[clamp(2rem,5vw,3rem)] font-black font-outfit text-white">{s.value.replace('+', '')}<span className="text-red-600">+</span></p>
+                <p className="text-[clamp(0.65rem,1vw,0.75rem)] uppercase tracking-widest text-neutral-400 mt-[clamp(0.25rem,1vw,0.5rem)] font-medium">{s.label}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ----------------------------------------------------------------------
+// OUR SERVICES SECTION
+// ----------------------------------------------------------------------
+const services = [
+  {
+    id: "01",
+    title: "PHOTOGRAPHY",
+    slug: "photography",
+    tagline: "Capturing moments that tell a story.",
+    description: "Professional photography for brands, events, and products. High-quality visuals that resonate with your audience.",
+    buttonText: "See our gallery",
+    icon: (
+      <svg className="w-[clamp(1.5rem,3vw,2rem)] h-[clamp(1.5rem,3vw,2rem)] text-red-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+        <circle cx="12" cy="13" r="3" />
+      </svg>
+    )
+  },
+  {
+    id: "02",
+    title: "WEB & APP DEVELOPMENT",
+    slug: "web-app-development",
+    tagline: "Building digital ecosystems for growth.",
+    description: "Responsive websites and intuitive mobile applications. We code for performance, scalability, and seamless user experiences.",
+    buttonText: "View our stack",
+    icon: (
+      <svg className="w-[clamp(1.5rem,3vw,2rem)] h-[clamp(1.5rem,3vw,2rem)] text-neutral-400 group-hover:text-red-600 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
+        <line x1="12" y1="18" x2="12.01" y2="18" />
+        <polyline points="16 18 22 12 16 6" className="opacity-0 group-hover:opacity-100 transition-opacity" />
+        <polyline points="8 6 2 12 8 18" className="opacity-0 group-hover:opacity-100 transition-opacity" />
+      </svg>
+    )
+  },
+  {
+    id: "03",
+    title: "DIGITAL MARKETING",
+    slug: "digital-marketing",
+    tagline: "Connecting your brand to the right audience.",
+    description: "Data-driven strategies across SEO, social media, and performance marketing to scale your presence and generate leads.",
+    buttonText: "Boost your brand",
+    icon: (
+      <svg className="w-[clamp(1.5rem,3vw,2rem)] h-[clamp(1.5rem,3vw,2rem)] text-neutral-400 group-hover:text-red-600 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="m12 14 4-4" />
+        <path d="M3.34 19a10 10 0 1 1 17.32 0" />
+      </svg>
+    )
+  },
+  {
+    id: "04",
+    title: "VIDEO PRODUCTION",
+    slug: "video-production",
+    tagline: "Dynamic visual storytelling designed to engage.",
+    description: "From conceptualization to post-production, we create impactful videos including DVCs, corporate films, and drone cinematography.",
+    buttonText: "See what we've filmed",
+    icon: (
+      <svg className="w-[clamp(1.5rem,3vw,2rem)] h-[clamp(1.5rem,3vw,2rem)] text-neutral-400 group-hover:text-red-600 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <polygon points="23 7 16 12 23 17 23 7" />
+        <rect x="1" y="5" width="15" height="14" rx="2" ry="2" />
+      </svg>
+    )
+  },
+  {
+    id: "05",
+    title: "GRAPHIC DESIGNING",
+    slug: "graphic-designing",
+    tagline: "Identity in every pixel.",
+    description: "Creative visual communication: logos, brand identities, and marketing assets that define your brand's unique voice.",
+    buttonText: "Explore our designs",
+    icon: (
+      <svg className="w-[clamp(1.5rem,3vw,2rem)] h-[clamp(1.5rem,3vw,2rem)] text-neutral-400 group-hover:text-red-600 transition-colors" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 19l7-7 3 3-7 7-3-3z" />
+        <path d="M18 13l-1.5-7.5L2 2l4 14.5L13 18l5-5z" />
+        <path d="M2 2l1.5 1.5" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+    )
+  }
+];
+
+function ServicesSection() {
+  const [activeService, setActiveService] = useState("01");
+
+  return (
+    <section className="w-full bg-black py-[clamp(4rem,10vw,6rem)] px-[clamp(1.5rem,4vw,3rem)] border-t border-white/5 overflow-hidden">
+      <div className="max-w-7xl mx-auto">
+        <div className="flex items-center gap-3 mb-[clamp(2rem,5vw,3rem)]">
+          <svg className="w-[clamp(1rem,2vw,1.25rem)] h-[clamp(1rem,2vw,1.25rem)] text-red-600 fill-current" viewBox="0 0 24 24">
+            <path d="M12 0L14.59 9.41L24 12L14.59 14.59L12 24L9.41 14.59L0 12L9.41 9.41L12 0Z" />
+          </svg>
+          <span className="text-neutral-400 uppercase tracking-widest text-[clamp(0.75rem,1.5vw,0.875rem)] font-medium">Our Services</span>
+        </div>
+
+        <div className="border-t border-white/10">
+          {services.map((service) => (
+            <div
+              key={service.id}
+              className={`group relative border-b border-white/10 cursor-pointer transition-all duration-500 hover:bg-white/[0.02] ${activeService === service.id ? 'bg-white/[0.03]' : ''}`}
+              onClick={() => setActiveService(activeService === service.id ? null : service.id)}
+            >
+              {activeService === service.id && (
+                <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                  <div className="absolute top-1/2 left-1/4 -translate-y-1/2 w-full h-[150%] bg-red-600/10 blur-[120px] rounded-full"></div>
+                </div>
+              )}
+
+              <div className="relative z-10 py-[clamp(1.5rem,4vw,2.5rem)] flex flex-col">
+                <div className="flex items-center justify-between gap-[clamp(0.75rem,3vw,2rem)]">
+                  {/* CRITICAL FIX: Added min-w-0 so Flexbox allows the text to wrap, preventing icon push-out */}
+                  {/* Changed to items-start on mobile so the number aligns cleanly when the title wraps */}
+                  <div className="flex items-start md:items-baseline gap-[clamp(0.75rem,3vw,3rem)] min-w-0">
+                    <span className="text-[clamp(0.65rem,1.5vw,0.75rem)] text-neutral-600 font-mono tracking-widest flex-shrink-0 mt-[0.35rem] md:mt-0">
+                      {service.id}
+                    </span>
+                    {/* CRITICAL FIX: Dropped the minimum clamp size significantly for mobile, enforced leading, and ensured breaking words */}
+                    <h3 className="text-[clamp(1.2rem,5vw,3.75rem)] font-bold tracking-tight text-white/90 leading-[1.1] break-words">
+                      {service.title}
+                    </h3>
+                  </div>
+
+                  {/* flex-shrink-0 ensures the icon button never gets crushed by the text */}
+                  <div className={`p-[clamp(0.5rem,1vw,0.75rem)] rounded-lg border transition-all duration-300 flex-shrink-0 ${activeService === service.id ? 'border-red-600/50 bg-red-600/10' : 'border-white/5 bg-white/5'}`}>
+                    {service.icon}
+                  </div>
+                </div>
+
+                <div className={`grid transition-all duration-500 ease-in-out ${activeService === service.id ? 'grid-rows-[1fr] opacity-100 mt-[clamp(1.5rem,4vw,2.5rem)]' : 'grid-rows-[0fr] opacity-0'}`}>
+                  <div className="overflow-hidden">
+                    <div className="flex flex-col md:flex-row gap-[clamp(1.5rem,4vw,6rem)] pl-0 md:pl-[clamp(2rem,6vw,6rem)]">
+                      <div className="max-w-xl">
+                        <p className="text-[clamp(1rem,2vw,1.125rem)] text-white mb-[clamp(0.5rem,2vw,1rem)] italic font-light">{service.tagline}</p>
+                        <p className="text-neutral-500 text-[clamp(0.875rem,1.5vw,1rem)] leading-relaxed mb-[clamp(1.5rem,4vw,2rem)]">
+                          {service.description}
+                        </p>
+                        <Link
+                          to={`/services/${service.slug}`}
+                          className="inline-flex items-center gap-3 px-[clamp(1.5rem,4vw,2rem)] py-[clamp(0.5rem,1.5vw,0.75rem)] rounded-full border border-red-600/30 bg-red-600/5 text-[clamp(0.7rem,1vw,0.75rem)] uppercase tracking-widest text-white hover:bg-red-600 hover:border-red-600 transition-all duration-300 group/btn"
+                        >
+                          {service.buttonText}
+                          <svg className="w-4 h-4 translate-x-0 group-hover/btn:translate-x-1 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="5" y1="12" x2="19" y2="12"></line>
+                            <polyline points="12 5 19 12 12 19"></polyline>
+                          </svg>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}

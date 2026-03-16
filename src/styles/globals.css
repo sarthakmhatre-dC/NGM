@@ -1,0 +1,57 @@
+@import "tailwindcss";
+@import "./fonts.css";
+
+:root {
+  --background: #000000;
+  --foreground: #ffffff;
+  --primary: #f20c00;
+}
+
+* {
+  -ms-overflow-style: none !important;
+  /* IE and Edge */
+  scrollbar-width: none !important;
+  /* Firefox */
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  /* Chrome, Safari and Opera */
+}
+
+html,
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: var(--font-inter), sans-serif;
+  overflow-x: hidden;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-outfit), sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+::selection {
+  background: var(--primary);
+  color: #ffffff;
+}
+
+.red-glow {
+  position: absolute;
+  top: -150px;
+  right: -300px;
+  width: 1400px;
+  height: 600px;
+  background: radial-gradient(rgba(242, 12, 0, 0.4) 0%, rgba(242, 12, 0, 0.15) 40%, rgba(242, 12, 0, 0) 70%);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  filter: blur(120px);
+}
