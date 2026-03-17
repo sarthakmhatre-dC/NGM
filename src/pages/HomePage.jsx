@@ -3,9 +3,10 @@
 import { useLayoutEffect, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
-import Image from '../components/common/Image';
+import Image from '../components/common/Image'; // Ensure this path is correct in your setup
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
+
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
 }
@@ -27,14 +28,18 @@ export default function HomePage() {
   const [isReady, setIsReady] = useState(false);
   const [isTransitioning, setIsTransitioning] = useState(false);
 
+  // NEW STATE: Tracks if video is allowed to be interacted with/played
+  const [isExpandComplete, setIsExpandComplete] = useState(false);
+
   // Raw YouTube API Refs
   const playerDivRef = useRef(null);
   const ytPlayerRef = useRef(null);
 
-  // 1. Simplified YouTube API Logic (Direct Feed)
+  // 1. YouTube API Logic
+// 1. YouTube API Logic
   useEffect(() => {
     let player;
-    let isUnmounted = false; // <-- CRITICAL FIX: Defined this variable so it doesn't crash
+    let isUnmounted = false;
 
     const initPlayer = () => {
       if (!playerDivRef.current || isUnmounted) return;
@@ -48,51 +53,63 @@ export default function HomePage() {
           rel: 0,
           showinfo: 0,
           playsinline: 1,
-          enablejsapi: 1, // <--- THE CRITICAL FIX: Tells YouTube to listen to your custom buttons
+          enablejsapi: 1,
           origin: typeof window !== 'undefined' ? window.location.origin : ''
         },
         events: {
           onReady: (event) => {
             if (isUnmounted) return;
-            ytPlayerRef.current = event.target; // <--- Failsafe: Guarantees API methods are attached
+            ytPlayerRef.current = event.target;
             setIsReady(true);
             setTimeout(() => event.target.setVolume(80), 100);
           },
           onStateChange: (event) => {
             if (isUnmounted) return;
-
+            setIsReady(true); // FAILSAFE 1: Unlock skeleton the second the video state changes
             const state = event.data;
-            // Pro-Tip: Adding BUFFERING here hides the play button INSTANTLY on click, 
-            // so the user knows it worked even if they have slow internet.
-            if (state === window.YT.PlayerState.PLAYING || state === window.YT.PlayerState.BUFFERING) {
+            if (state === 1 || state === 3) {
               setIsPlaying(true);
-            } else if (state === window.YT.PlayerState.PAUSED || state === window.YT.PlayerState.ENDED) {
+            } else if (state === 2 || state === 0) {
               setIsPlaying(false);
             }
           }
         }
       });
+
+      // FAILSAFE 2: If the YT API is totally frozen, destroy the black skeleton after 2 seconds anyway
+      setTimeout(() => {
+        if (!isUnmounted) setIsReady(true);
+      }, 2000);
     };
 
     if (window.YT && window.YT.Player) {
       initPlayer();
-    } else {
-      if (!document.getElementById('youtube-iframe-api')) {
-        const script = document.createElement('script');
-        script.id = 'youtube-iframe-api';
-        script.src = 'https://www.youtube.com/iframe_api';
-        document.body.appendChild(script);
-      }
+    } else if (!document.getElementById('youtube-iframe-api')) {
+      const script = document.createElement('script');
+      script.id = 'youtube-iframe-api';
+      script.src = 'https://www.youtube.com/iframe_api';
+      document.body.appendChild(script);
 
       const previousOnReady = window.onYouTubeIframeAPIReady;
       window.onYouTubeIframeAPIReady = () => {
         if (previousOnReady) previousOnReady();
         initPlayer();
       };
+    } else {
+      // THE ROUTER BUG FIX: The script exists, but window.YT isn't attached yet. 
+      // We manually poll for it every 100ms instead of waiting for a dead event.
+      const checkYT = setInterval(() => {
+        if (window.YT && window.YT.Player) {
+          clearInterval(checkYT);
+          initPlayer();
+        }
+      }, 100);
+      // Safety clear
+      setTimeout(() => clearInterval(checkYT), 5000); 
     }
 
     return () => {
-      isUnmounted = true; // <-- CRITICAL FIX: Cleanup
+      isUnmounted = true;
       if (ytPlayerRef.current && ytPlayerRef.current.destroy) {
         ytPlayerRef.current.destroy();
       }
@@ -119,24 +136,18 @@ export default function HomePage() {
     if (isTransitioning || !ytPlayerRef.current) return;
 
     setIsTransitioning(true);
-
     if (isPlaying) {
       ytPlayerRef.current.pauseVideo();
+      setIsPlaying(false); // FORCE UI UPDATE: Instantly show play button / hide controls
     } else {
       ytPlayerRef.current.playVideo();
+      setIsPlaying(true);  // FORCE UI UPDATE: Instantly hide play button / show controls
     }
-
-    setTimeout(() => {
-      setIsTransitioning(false);
-    }, 400);
+    setTimeout(() => setIsTransitioning(false), 400);
   };
 
   const handleSeekMouseDown = () => setIsSeeking(true);
-
-  const handleSeekChange = (e) => {
-    setPlayedFraction(parseFloat(e.target.value));
-  };
-
+  const handleSeekChange = (e) => setPlayedFraction(parseFloat(e.target.value));
   const handleSeekMouseUp = (e) => {
     setIsSeeking(false);
     if (ytPlayerRef.current && ytPlayerRef.current.getDuration) {
@@ -168,10 +179,16 @@ export default function HomePage() {
     }
   };
 
-  // GSAP Animations
+  // 4. GSAP Animations with MatchMedia
   useLayoutEffect(() => {
-    const timer = setTimeout(() => {
-      const ctx = gsap.context(() => {
+    const ctx = gsap.context(() => {
+      let mm = gsap.matchMedia();
+      let wasFullyExpanded = false; // Local tracker to prevent firing API repeatedly
+
+      // DESKTOP: Apply scroll animation
+      mm.add("(min-width: 768px)", () => {
+        setIsExpandComplete(false); // Reset on mount/resize
+
         const tl = gsap.timeline({
           scrollTrigger: {
             trigger: showreelSectionRef.current,
@@ -180,48 +197,43 @@ export default function HomePage() {
             pin: true,
             scrub: 1,
             anticipatePin: 1,
-            // ADD THESE TWO CALLBACKS:
-            onLeave: () => {
-              if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
-                ytPlayerRef.current.pauseVideo();
+            onUpdate: (self) => {
+              const isCurrentlyExpanded = self.progress === 1;
+
+              if (isCurrentlyExpanded && !wasFullyExpanded) {
+                wasFullyExpanded = true;
+                // Autoplay completely removed. User must click to play.
               }
-            },
-            onLeaveBack: () => {
-              if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
-                ytPlayerRef.current.pauseVideo();
+              else if (!isCurrentlyExpanded && wasFullyExpanded) {
+                wasFullyExpanded = false;
+                if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
+                  ytPlayerRef.current.pauseVideo(); // Keeps the auto-pause if user scrolls away
+                }
               }
             }
           }
         });
 
-        // Expand the Video Box to Full Screen
         tl.to(videoBoxRef.current, {
-          width: "100vw",
-          height: "100vh",
-          top: "0%",
+          width: "85vw",
+          height: "85vh",
+          top: "10vh",
           borderRadius: "0px",
           ease: "power2.inOut",
-          force3D: true, // <-- Fixes the shaking by forcing hardware acceleration
+          autoRound: false, // CRITICAL FIX: Stops width/height sub-pixel jittering
+          force3D: true,
         }, 0);
 
-        // Parallax the "SHOWREEL" text
         tl.to(showreelTitleRef.current, {
           y: -100,
           opacity: 0.5,
           ease: "power2.inOut",
         }, 0);
 
-        // "VERVE" Text inside video scaling
-        // <-- CRITICAL FIX: Safety check added so GSAP doesn't crash on null
         if (verveTextRef.current) {
-          tl.to(verveTextRef.current, {
-            scale: 1.5,
-            opacity: 0,
-            ease: "power2.inOut",
-          }, 0);
+          tl.to(verveTextRef.current, { scale: 1.5, opacity: 0, ease: "power2.inOut" }, 0);
         }
 
-        // Hide Hero on Scroll
         if (heroRef.current) {
           gsap.to(heroRef.current, {
             scrollTrigger: {
@@ -235,39 +247,63 @@ export default function HomePage() {
             ease: "none"
           });
         }
-      }, mainRef);
+      });
 
-      ScrollTrigger.refresh();
+      // MOBILE: No scroll animation, just allow interaction immediately
+      // MOBILE: No scroll animation, just allow interaction immediately
+      mm.add("(max-width: 767px)", () => {
+        setIsExpandComplete(true); // Unlock controls
 
-      return () => ctx.revert();
-    }, 100);
+        // Hide hero quickly on mobile since section won't pin
+        if (heroRef.current) {
+          gsap.to(heroRef.current, {
+            scrollTrigger: {
+              trigger: showreelSectionRef.current,
+              start: "top 70%",
+              end: "top 30%",
+              scrub: true,
+            },
+            opacity: 0,
+            ease: "none"
+          });
+        }
 
-    return () => clearTimeout(timer);
+        // NEW: Smoothly hide the "SHOWREEL" text as user scrolls down
+        if (showreelTitleRef.current) {
+          gsap.to(showreelTitleRef.current, {
+            scrollTrigger: {
+              trigger: showreelSectionRef.current,
+              start: "top 60%", // Starts fading when section moves up
+              end: "top 30%",   // Fully invisible by the time video takes focus
+              scrub: true,
+            },
+            opacity: 0,
+            y: -50,
+            ease: "none"
+          });
+        }
+      });
+
+    }, mainRef);
+
+    return () => ctx.revert();
   }, []);
 
   return (
     <div ref={mainRef} className="relative bg-black min-h-screen text-white font-sans selection:bg-red-600 selection:text-white">
-
       {/* HERO SECTION */}
       <section ref={heroRef} className="fixed top-0 left-0 w-full h-screen flex flex-col items-center justify-center overflow-hidden z-0">
-        <div
-          className="absolute bottom-0 right-0 w-[40vw] h-[60vh] pointer-events-none origin-bottom-right opacity-60 blur-[100px] z-0"
-          style={{ background: 'linear-gradient(to top left, #a30800 0%, #ff1a1a 20%, transparent 60%)' }}
-        ></div>
-
+        {/* Hero code remains exactly the same... */}
+        <div className="absolute bottom-0 right-0 w-[40vw] h-[60vh] pointer-events-none origin-bottom-right opacity-60 blur-[100px] z-0" style={{ background: 'linear-gradient(to top left, #a30800 0%, #ff1a1a 20%, transparent 60%)' }}></div>
         <div className="relative z-10 text-center px-[clamp(1.5rem,4vw,3rem)] max-w-7xl mx-auto pt-10">
           <h1 className="text-[clamp(2.5rem,6vw+1rem,5.5rem)] font-bold tracking-tight leading-[1.1] text-white uppercase mb-[clamp(1.5rem,4vw,2rem)]">
             Explore the true potential <br />
             <span className="text-neutral-400">of your brand</span>
           </h1>
-
           <p className="text-[clamp(0.875rem,2vw,1.125rem)] text-neutral-400 max-w-2xl mx-auto mb-[clamp(2rem,5vw,3rem)] font-medium leading-relaxed">
             We help Mumbai brands grow through video-led marketing that turns attention into engagement, leads, and revenue.
           </p>
-          <Link
-            to="/contact"
-            className="inline-block px-[clamp(2rem,5vw,2.5rem)] py-[clamp(0.75rem,2vw,1rem)] rounded-full border border-white/20 bg-white/5 backdrop-blur-sm hover:bg-white hover:text-black transition-all duration-300 group"
-          >
+          <Link to="/contact" className="inline-block px-[clamp(2rem,5vw,2.5rem)] py-[clamp(0.75rem,2vw,1rem)] rounded-full border border-white/20 bg-white/5 backdrop-blur-sm hover:bg-white hover:text-black transition-all duration-300 group">
             <span className="text-[clamp(0.75rem,1.5vw,0.875rem)] font-bold tracking-widest uppercase">Contact Us</span>
           </Link>
         </div>
@@ -277,61 +313,56 @@ export default function HomePage() {
       <div className="relative z-10 mt-[100vh] bg-black shadow-[0_-50px_100px_rgba(0,0,0,1)]">
 
         {/* SHOWREEL ANIMATION SECTION */}
-        <section ref={showreelSectionRef} className="h-screen w-full relative bg-black overflow-hidden group/section">
-
-          {/* 1. Showreel Title */}
-          <h2
-            ref={showreelTitleRef}
-            className="absolute top-[20%] md:top-[15%] left-1/2 -translate-x-1/2 text-[clamp(2.5rem,14vw,18rem)] font-bold text-white uppercase tracking-tighter leading-none whitespace-nowrap z-30 select-none pointer-events-none mix-blend-difference"
-          >
+        <section ref={showreelSectionRef} className="md:h-screen w-full relative bg-black overflow-hidden group/section py-20 md:py-0">
+          {/* Removed 'hidden md:block' and nudged the mobile top position slightly so it clears the video */}
+          <h2 ref={showreelTitleRef} className="absolute top-[5%] md:top-[15%] left-1/2 -translate-x-1/2 text-[clamp(3.5rem,14vw,18rem)] font-bold text-white uppercase tracking-tighter leading-none whitespace-nowrap z-30 select-none pointer-events-none mix-blend-difference">
             Showreel
           </h2>
 
-          {/* 2. Video Box Container */}
-          {/* CRITICAL FIX: Replaced left-1/2 -translate-x-1/2 with inset-x-0 mx-auto. Stops GSAP layout fighting. */}
           <div
             ref={videoBoxRef}
-            className="absolute top-[50%] md:top-[55%] inset-x-0 mx-auto w-[90vw] md:w-[60vw] lg:w-[50vw] h-[30vh] md:h-[35vh] lg:h-[45vh] z-30 bg-neutral-900 overflow-hidden rounded-[clamp(1rem,3vw,2rem)] flex items-center justify-center shadow-2xl relative group/playe"
+            className="md:absolute md:top-[55%] inset-x-0 mx-auto w-[90vw] md:w-[60vw] lg:w-[50vw] h-[40vh] md:h-[35vh] lg:h-[45vh] z-30 bg-neutral-900 overflow-hidden rounded-[clamp(1rem,3vw,2rem)] flex items-center justify-center shadow-2xl relative group/player"
             style={{
               willChange: 'width, height, top, transform',
-              transform: 'translateZ(0)', /* Forces GPU hardware acceleration */
-              backfaceVisibility: 'hidden' /* Stops sub-pixel rendering jitter */
+              transform: 'translateZ(0)',
+              backfaceVisibility: 'hidden'
             }}
           >
-
-            {/* The Raw YouTube IFrame Wrapper */}
+            {/* Raw YouTube Wrapper */}
             <div className="absolute inset-0 w-full h-full pointer-events-none bg-black">
-              {/* THE DEEP CROP: 
-                  We make the iframe 150% of the container size and center it.
-                  This permanently forces YouTube's Title, Avatar, and Watch Later buttons
-                  outside the visible bounds of your overflow-hidden parent. */}
               <div className="absolute top-1/2 left-1/2 w-[150%] h-[150%] -translate-x-1/2 -translate-y-1/2">
                 <div ref={playerDivRef} className="w-full h-full pointer-events-none" />
               </div>
             </div>
 
-            {/* Subtle Black Overlay to make text pop when paused */}
+            {/* Subtle Overlay */}
             <div className={`absolute inset-0 bg-black/50 pointer-events-none transition-opacity duration-500 z-10 ${isPlaying ? 'opacity-0' : 'opacity-100'}`}></div>
 
-            {/* Big Play Button (Visible when paused) */}
-            <div className={`absolute inset-0 flex items-center justify-center z-20 transition-opacity duration-500 ${isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
+            {/* Click-Anywhere Hit Area */}
+            <div
+              className="absolute inset-0 z-15 cursor-pointer"
+              onClick={handlePlayPause}
+            ></div>
+
+            {/* Big Play Button */}
+            {/* Big Play Button */}
+            <div className={`absolute inset-0 flex items-center justify-center z-20 transition-opacity duration-500 ${isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-none'}`}>
               <button
                 onClick={handlePlayPause}
                 disabled={!isReady || isTransitioning}
-                className={`relative z-30 w-[clamp(3rem,8vw,4rem)] h-[clamp(3rem,8vw,4rem)] rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 transition-all duration-300 ${isReady ? 'hover:bg-white/20 hover:scale-110 cursor-pointer' : 'opacity-50 cursor-wait'}`}
+                className={`relative z-30 w-[clamp(3rem,8vw,4rem)] h-[clamp(3rem,8vw,4rem)] rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 transition-all duration-300 ${isReady && !isPlaying ? 'hover:bg-white/20 hover:scale-110 pointer-events-auto cursor-pointer' : 'pointer-events-none'}`}
               >
                 <div className="w-0 h-0 border-t-[clamp(4px,1vw,8px)] border-t-transparent border-l-[clamp(8px,2vw,14px)] border-l-white border-b-[clamp(4px,1vw,8px)] border-b-transparent ml-1"></div>
               </button>
             </div>
 
-            {/* Custom Bottom Media Controls (Visible when playing) */}
-            <div className={`absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-[clamp(1rem,2vw,1.5rem)] flex items-center gap-[clamp(0.75rem,2vw,1.5rem)] z-40 transition-all duration-500 ${isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-
+            {/* Custom Bottom Media Controls */}
+            {/* Custom Bottom Media Controls */}
+            <div className={`absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-[clamp(1rem,2vw,1.5rem)] flex items-center gap-[clamp(0.75rem,2vw,1.5rem)] z-40 transition-all duration-500 ${isPlaying ? 'opacity-100 translate-y-0 pointer-events-auto' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
               <button onClick={handlePlayPause} disabled={isTransitioning} className="text-white hover:text-red-500 transition-colors cursor-pointer flex-shrink-0">
                 {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
               </button>
 
-              {/* Draggable Progress Bar */}
               <input
                 type="range"
                 min={0}
@@ -346,7 +377,6 @@ export default function HomePage() {
                 className="flex-grow h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer accent-red-600 focus:outline-none focus:ring-2 focus:ring-red-600/50"
               />
 
-              {/* Volume Controls */}
               <div className="flex items-center gap-2 flex-shrink-0">
                 <button onClick={toggleMute} className="text-white hover:text-red-500 transition-colors hidden sm:block cursor-pointer">
                   {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
@@ -362,20 +392,13 @@ export default function HomePage() {
                 />
               </div>
             </div>
-
           </div>
         </section>
 
-        {/* TRUSTED BY SECTION */}
+        {/* Other Sections */}
         <TrustedBySection />
-
-        {/* ABOUT US SECTION */}
         <AboutUsSection />
-
-        {/* OUR SERVICES SECTION */}
         <ServicesSection />
-
-        {/* STATS BAR SECTION */}
         <StatsBarSection />
 
       </div>

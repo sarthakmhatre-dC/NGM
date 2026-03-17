@@ -40,11 +40,11 @@ export default function ContactSection() {
             <div className="max-w-7xl mx-auto px-[clamp(1.5rem,4vw,2rem)]">
                 <div className="mb-[clamp(2.5rem,6vw,4rem)] uppercase">
                     {/* Fluid subheading */}
-                    <h3 className="text-[clamp(1rem,2vw,1.25rem)] font-light tracking-widest text-neutral-400 mb-[clamp(0.5rem,2vw,1rem)]">
+                    <h3 className="text-[clamp(0.875rem,2vw,1.25rem)] font-light tracking-widest text-neutral-400 mb-[clamp(0.5rem,2vw,1rem)]">
                         Lets Work
                     </h3>
                     {/* Fluid main heading: scales from 3.5rem on mobile to 6rem on desktop */}
-                    <h2 className="text-[clamp(3.5rem,8vw,6rem)] leading-tight font-bold font-outfit text-white">
+                    <h2 className="text-[clamp(2.5rem,8vw,6rem)] leading-tight font-bold font-outfit text-white">
                         Together
                     </h2>
                 </div>

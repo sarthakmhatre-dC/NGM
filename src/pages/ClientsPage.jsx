@@ -14,7 +14,7 @@ export default function ClientsPage() {
             <div className="max-w-7xl mx-auto px-6 pt-15">
                 {/* Header */}
                 <div className="flex flex-col items-center justify-center mb-20 text-center">
-                    <h1 className="text-6xl md:text-8xl font-black font-outfit mb-4 tracking-tighter uppercase text-white">
+                    <h1 className="text-[clamp(2.5rem,6vw+1rem,5.5rem)] font-bold tracking-tight leading-[1.1] text-white uppercase mb-[clamp(1.5rem,4vw,2rem)]">
                         CLIENTS
 
                     </h1>

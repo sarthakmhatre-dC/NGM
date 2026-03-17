@@ -44,7 +44,7 @@ export default function ContactPage() {
                 <div className="absolute top-[-100px] right-0 w-[600px] h-[600px] bg-red-600/20 blur-[150px] -z-10 pointer-events-none"></div>
 
                 <div className="max-w-7xl mx-auto px-6 text-center pt-15">
-                    <h1 className="text-6xl md:text-8xl font-black font-outfit mb-4 tracking-tighter uppercase text-white">
+                    <h1 className="text-[clamp(2.5rem,6vw+1rem,5.5rem)] font-bold tracking-tight leading-[1.1] text-white uppercase mb-[clamp(1.5rem,4vw,2rem)]">
                         CONTACT US
                     </h1>
                     <div className="flex items-center justify-center gap-2 text-neutral-400 text-sm tracking-widest uppercase font-medium">
