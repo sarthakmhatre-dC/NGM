@@ -36,7 +36,7 @@ export default function HomePage() {
   const ytPlayerRef = useRef(null);
 
   // 1. YouTube API Logic
-// 1. YouTube API Logic
+  // 1. YouTube API Logic
   useEffect(() => {
     let player;
     let isUnmounted = false;
@@ -105,7 +105,7 @@ export default function HomePage() {
         }
       }, 100);
       // Safety clear
-      setTimeout(() => clearInterval(checkYT), 5000); 
+      setTimeout(() => clearInterval(checkYT), 5000);
     }
 
     return () => {
@@ -410,12 +410,11 @@ export default function HomePage() {
 // TRUSTED BY SECTION
 // ----------------------------------------------------------------------
 const trustedPeople = [
-  "https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=1000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1573496359-136d919d7402?q=80&w=1000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?q=80&w=1000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1580489944761-15a19d654956?q=80&w=1000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1000&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1598550832205-d07e46633783?q=80&w=1000&auto=format&fit=crop",
+  "/homeLogos/Bellezza Logo.png",
+  "/homeLogos/Dr. batra Logo.png",
+  "/homeLogos/Intellarc Communications Logo.png",
+  "/homeLogos/Muthoot Exim Logo.png",
+  "/homeLogos/Unboxing Real Estate Logo.png",
 ];
 
 function TrustedBySection() {
@@ -437,11 +436,11 @@ function TrustedBySection() {
                   <path d="M0 5 Q 50 10 100 5" stroke="currentColor" strokeWidth="2" fill="none" />
                 </svg>
               </span>
-              by People <br /> from various industries
+              by Clients <br /> from various industries
             </h2>
           </div>
           <div className="max-w-md text-neutral-400 text-[clamp(1rem,2vw,1.125rem)] leading-relaxed mb-2">
-            Meet the people who didn’t just partner with us they grew with us. From different industries to common ambitions, these voices show what trust can truly build.
+            Meet the clients who didn’t just partner with us they grew with us. From different industries to common ambitions, these voices show what trust can truly build.
           </div>
         </div>
       </div>
@@ -449,15 +448,16 @@ function TrustedBySection() {
       <div className="flex overflow-hidden pb-4">
         <div className="flex animate-trusted-marquee gap-[clamp(1.5rem,3vw,2rem)] pl-[clamp(1.5rem,4vw,3rem)]">
           {[...trustedPeople, ...trustedPeople].map((src, i) => (
-            // Switched fixed pixel sizes to fluid clamps using rem units
-            <div key={i} className="relative w-[clamp(16rem,40vw,21.875rem)] h-[clamp(22rem,55vw,28.125rem)] flex-shrink-0 rounded-[clamp(1.5rem,4vw,2rem)] overflow-hidden border border-white/10 grayscale hover:grayscale-0 transition-all duration-500 group cursor-pointer">
+            // Adjusted container to Landscape (Wider than Height) and added a subtle bg
+            <div key={i} className="relative flex items-center justify-center w-[clamp(14rem,35vw,20rem)] h-[clamp(7rem,18vw,10rem)] flex-shrink-0 rounded-[clamp(1rem,3vw,1.5rem)] overflow-hidden border border-white/10 bg-white/[0.02] grayscale-0 md:grayscale hover:grayscale-0 transition-all duration-500 group cursor-pointer">
               <Image
                 src={src}
-                alt="Client"
+                alt="Client Logo"
                 fill
-                className="object-cover transform group-hover:scale-110 transition-transform duration-700"
+                // CRITICAL: object-contain prevents cropping. Padding keeps logos away from the border.
+                className="object-contain p-[clamp(1.5rem,3vw,2.5rem)] transform group-hover:scale-110 transition-transform duration-700"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
             </div>
           ))}
         </div>
