@@ -440,7 +440,7 @@ function TrustedBySection() {
             </h2>
           </div>
           <div className="max-w-md text-neutral-400 text-[clamp(1rem,2vw,1.125rem)] leading-relaxed mb-2">
-            Meet the clients who didn’t just partner with us they grew with us. From different industries to common ambitions, these voices show what trust can truly build.
+            Meet our clients who didn’t just partner with us they grew with us. From different industries to common ambitions, these voices show what trust can truly build.
           </div>
         </div>
       </div>
