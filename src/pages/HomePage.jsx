@@ -449,13 +449,11 @@ function TrustedBySection() {
         <div className="flex animate-trusted-marquee gap-[clamp(1.5rem,3vw,2rem)] pl-[clamp(1.5rem,4vw,3rem)]">
           {[...trustedPeople, ...trustedPeople].map((src, i) => (
             // Adjusted container to Landscape (Wider than Height) and added a subtle bg
-            <div key={i} className="relative flex items-center justify-center w-[clamp(14rem,35vw,20rem)] h-[clamp(7rem,18vw,10rem)] flex-shrink-0 rounded-[clamp(1rem,3vw,1.5rem)] overflow-hidden border border-white/10 bg-white/[0.02] grayscale-0 md:grayscale hover:grayscale-0 transition-all duration-500 group cursor-pointer">
+            <div key={i} className="relative flex items-center justify-center p-[clamp(1rem,2vw,1.5rem)] w-[clamp(14rem,35vw,20rem)] h-[clamp(9rem,12vw,14rem)] flex-shrink-0 rounded-[clamp(1rem,3vw,1.5rem)] overflow-hidden border border-white/10 bg-white/[0.02] grayscale-0 md:grayscale hover:grayscale-0 transition-all duration-500 group cursor-pointer">
               <Image
                 src={src}
                 alt="Client Logo"
-                fill
-                // CRITICAL: object-contain prevents cropping. Padding keeps logos away from the border.
-                className="object-contain p-[clamp(1.5rem,3vw,2.5rem)] transform group-hover:scale-110 transition-transform duration-700"
+                className="relative w-full h-full object-contain transform group-hover:scale-110 transition-transform duration-700 z-10"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"></div>
             </div>
