@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useEffect, useRef, useState } from "react";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 
@@ -9,7 +9,17 @@ const words = ["Creative", "Photography", "Shoot", "Media", "Video"];
 export default function Preloader() {
     const containerRef = useRef(null);
     const textRef = useRef(null);
+    const videoRef = useRef(null); // 1. Added ref for the video
+    
     const [index, setIndex] = useState(0);
+    const [isVideoReady, setIsVideoReady] = useState(false); // 2. State to track video loading
+
+    // 3. Edge Case: Check if video is already cached and ready instantly
+    useEffect(() => {
+        if (videoRef.current && videoRef.current.readyState >= 3) {
+            setIsVideoReady(true);
+        }
+    }, []);
 
     useLayoutEffect(() => {
         // Check if preloader has already run in this session
@@ -19,14 +29,22 @@ export default function Preloader() {
             return;
         }
 
+        // 4. Halt the animation until the video is ready
+        if (!isVideoReady) return;
+
         // Lock scroll immediately
         document.body.style.overflow = "hidden";
+
+        // 5. Programmatically play the video exactly when GSAP starts
+        if (videoRef.current) {
+            videoRef.current.play().catch(e => console.log("Video autoplay blocked:", e));
+        }
 
         const tl = gsap.timeline();
 
         // Math for perfect sync: 8 seconds total / 5 words = 1.6 seconds per word cycle
         const transitionDuration = 0.15;
-        const holdDuration = 1.6 - (transitionDuration * 2); // 1.3 seconds holding time
+        const holdDuration = 1.6 - (transitionDuration * 2);
 
         // Initial word appearance (Takes 0.2s to fade in)
         tl.fromTo(
@@ -43,7 +61,6 @@ export default function Preloader() {
                 opacity: 0,
                 y: -15,
                 duration: transitionDuration,
-                // Deduct the initial 0.2s fade-in from the first word's hold time to maintain perfect 1.6s rhythm
                 delay: idx === 1 ? holdDuration - 0.2 : holdDuration,
                 onComplete: () => setIndex(idx),
             }).fromTo(
@@ -53,7 +70,7 @@ export default function Preloader() {
             );
         });
 
-        // Final exit animation timed perfectly with the end of the 8-second video
+        // Final exit animation
         tl.to(textRef.current, {
             opacity: 0,
             y: -10,
@@ -62,24 +79,23 @@ export default function Preloader() {
             ease: "power2.inOut",
         }).to(containerRef.current, {
             yPercent: -100,
-            duration: 0.6, // Slightly longer slide-up for a smooth, cinematic reveal
+            duration: 0.6,
             ease: "power3.inOut",
             onComplete: () => {
                 if (containerRef.current) containerRef.current.style.display = "none";
                 document.body.style.overflow = "auto";
                 sessionStorage.setItem("preloader-run", "true");
 
-                // Refresh ScrollTrigger after preloader is gone to fix animation issues on first load
                 gsap.registerPlugin(ScrollTrigger);
                 ScrollTrigger.refresh();
             },
-        }, "-=0.1"); // Overlap the slide up slightly with the text fading out
+        }, "-=0.1");
 
         return () => {
             tl.kill();
             document.body.style.overflow = "auto";
         };
-    }, []);
+    }, [isVideoReady]); // 6. Added isVideoReady to the dependency array
 
     return (
         <div
@@ -89,24 +105,26 @@ export default function Preloader() {
             style={{ touchAction: 'none' }}
         >
             {/* Background Video */}
-            {/* Bumped opacity to 70 since the dark gradient will naturally darken it */}
             <video
-                autoPlay
+                ref={videoRef}
+                // autoPlay removed -> controlled by JS now
                 muted
                 playsInline
                 preload="auto"
                 className="absolute inset-0 w-full h-full object-cover opacity-70 pointer-events-none"
                 src="https://7aop7sgroelxkagz.public.blob.vercel-storage.com/Website%20Loader%20Video.mp4"
+                onCanPlayThrough={() => setIsVideoReady(true)} // 7. Triggers the GSAP animation when buffered
+                onError={() => setIsVideoReady(true)} // 8. Fallback: play animation anyway if video totally fails to load
             />
 
             {/* Radial Vignette Overlay */}
-            {/* Starts transparent in the center and fades to 90% black at the edges */}
             <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle,transparent_10%,rgba(0,0,0,0.9)_100%)]"></div>
 
             {/* Foreground Text */}
             <div
                 ref={textRef}
-                className="relative z-10 text-4xl md:text-6xl font-bold font-sans text-white tracking-tighter"
+                // Added opacity-0 by default so the first word hides until GSAP fades it in
+                className="relative z-10 text-4xl md:text-6xl font-bold font-sans text-white tracking-tighter opacity-0"
             >
                 {words[index]}
             </div>

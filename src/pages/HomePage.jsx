@@ -6,7 +6,6 @@ import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
 import Image from '../components/common/Image';
 import gsap from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
-
 if (typeof window !== 'undefined') {
   gsap.registerPlugin(ScrollTrigger);
 }
@@ -32,11 +31,16 @@ export default function HomePage() {
   const playerDivRef = useRef(null);
   const ytPlayerRef = useRef(null);
 
-  // 1. Initialize Native YouTube IFrame API
+  // 1. Simplified YouTube API Logic (Direct Feed)
   useEffect(() => {
-    const loadYouTubeAPI = () => {
-      ytPlayerRef.current = new window.YT.Player(playerDivRef.current, {
-        videoId: 'bipYaBqAnsY', // Your video ID
+    let player;
+    let isUnmounted = false; // <-- CRITICAL FIX: Defined this variable so it doesn't crash
+
+    const initPlayer = () => {
+      if (!playerDivRef.current || isUnmounted) return;
+
+      player = new window.YT.Player(playerDivRef.current, {
+        videoId: 'bipYaBqAnsY',
         playerVars: {
           controls: 0,
           disablekb: 1,
@@ -44,18 +48,25 @@ export default function HomePage() {
           rel: 0,
           showinfo: 0,
           playsinline: 1,
-          origin: window.location.origin
+          enablejsapi: 1, // <--- THE CRITICAL FIX: Tells YouTube to listen to your custom buttons
+          origin: typeof window !== 'undefined' ? window.location.origin : ''
         },
         events: {
           onReady: (event) => {
+            if (isUnmounted) return;
+            ytPlayerRef.current = event.target; // <--- Failsafe: Guarantees API methods are attached
             setIsReady(true);
-            event.target.setVolume(volume * 100);
+            setTimeout(() => event.target.setVolume(80), 100);
           },
           onStateChange: (event) => {
-            // YT.PlayerState.PLAYING = 1, PAUSED = 2, ENDED = 0
-            if (event.data === window.YT.PlayerState.PLAYING) {
+            if (isUnmounted) return;
+
+            const state = event.data;
+            // Pro-Tip: Adding BUFFERING here hides the play button INSTANTLY on click, 
+            // so the user knows it worked even if they have slow internet.
+            if (state === window.YT.PlayerState.PLAYING || state === window.YT.PlayerState.BUFFERING) {
               setIsPlaying(true);
-            } else if (event.data === window.YT.PlayerState.PAUSED || event.data === window.YT.PlayerState.ENDED) {
+            } else if (state === window.YT.PlayerState.PAUSED || state === window.YT.PlayerState.ENDED) {
               setIsPlaying(false);
             }
           }
@@ -64,15 +75,24 @@ export default function HomePage() {
     };
 
     if (window.YT && window.YT.Player) {
-      loadYouTubeAPI();
+      initPlayer();
     } else {
-      const script = document.createElement('script');
-      script.src = 'https://www.youtube.com/iframe_api';
-      document.body.appendChild(script);
-      window.onYouTubeIframeAPIReady = loadYouTubeAPI;
+      if (!document.getElementById('youtube-iframe-api')) {
+        const script = document.createElement('script');
+        script.id = 'youtube-iframe-api';
+        script.src = 'https://www.youtube.com/iframe_api';
+        document.body.appendChild(script);
+      }
+
+      const previousOnReady = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => {
+        if (previousOnReady) previousOnReady();
+        initPlayer();
+      };
     }
 
     return () => {
+      isUnmounted = true; // <-- CRITICAL FIX: Cleanup
       if (ytPlayerRef.current && ytPlayerRef.current.destroy) {
         ytPlayerRef.current.destroy();
       }
@@ -96,19 +116,19 @@ export default function HomePage() {
 
   // 3. Control Handlers
   const handlePlayPause = () => {
-    if (isTransitioning || !ytPlayerRef.current) return; 
-    
+    if (isTransitioning || !ytPlayerRef.current) return;
+
     setIsTransitioning(true);
-    
+
     if (isPlaying) {
       ytPlayerRef.current.pauseVideo();
     } else {
       ytPlayerRef.current.playVideo();
     }
-    
+
     setTimeout(() => {
       setIsTransitioning(false);
-    }, 400); 
+    }, 400);
   };
 
   const handleSeekMouseDown = () => setIsSeeking(true);
@@ -160,6 +180,17 @@ export default function HomePage() {
             pin: true,
             scrub: 1,
             anticipatePin: 1,
+            // ADD THESE TWO CALLBACKS:
+            onLeave: () => {
+              if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
+                ytPlayerRef.current.pauseVideo();
+              }
+            },
+            onLeaveBack: () => {
+              if (ytPlayerRef.current && typeof ytPlayerRef.current.pauseVideo === 'function') {
+                ytPlayerRef.current.pauseVideo();
+              }
+            }
           }
         });
 
@@ -170,6 +201,7 @@ export default function HomePage() {
           top: "0%",
           borderRadius: "0px",
           ease: "power2.inOut",
+          force3D: true, // <-- Fixes the shaking by forcing hardware acceleration
         }, 0);
 
         // Parallax the "SHOWREEL" text
@@ -180,11 +212,14 @@ export default function HomePage() {
         }, 0);
 
         // "VERVE" Text inside video scaling
-        tl.to(verveTextRef.current, {
-          scale: 1.5,
-          opacity: 0,
-          ease: "power2.inOut",
-        }, 0);
+        // <-- CRITICAL FIX: Safety check added so GSAP doesn't crash on null
+        if (verveTextRef.current) {
+          tl.to(verveTextRef.current, {
+            scale: 1.5,
+            opacity: 0,
+            ease: "power2.inOut",
+          }, 0);
+        }
 
         // Hide Hero on Scroll
         if (heroRef.current) {
@@ -253,37 +288,34 @@ export default function HomePage() {
           </h2>
 
           {/* 2. Video Box Container */}
-          {/* CRITICAL FIX: Removed border class and added will-change to prevent GSAP scrolling jitter */}
+          {/* CRITICAL FIX: Replaced left-1/2 -translate-x-1/2 with inset-x-0 mx-auto. Stops GSAP layout fighting. */}
           <div
             ref={videoBoxRef}
-            className="absolute top-[50%] md:top-[55%] left-1/2 -translate-x-1/2 w-[90vw] md:w-[60vw] lg:w-[50vw] h-[30vh] md:h-[35vh] lg:h-[45vh] z-30 bg-neutral-900 overflow-hidden rounded-[clamp(1rem,3vw,2rem)] flex items-center justify-center shadow-2xl relative group/player"
-            style={{ willChange: 'width, height, top' }}
+            className="absolute top-[50%] md:top-[55%] inset-x-0 mx-auto w-[90vw] md:w-[60vw] lg:w-[50vw] h-[30vh] md:h-[35vh] lg:h-[45vh] z-30 bg-neutral-900 overflow-hidden rounded-[clamp(1rem,3vw,2rem)] flex items-center justify-center shadow-2xl relative group/playe"
+            style={{
+              willChange: 'width, height, top, transform',
+              transform: 'translateZ(0)', /* Forces GPU hardware acceleration */
+              backfaceVisibility: 'hidden' /* Stops sub-pixel rendering jitter */
+            }}
           >
 
             {/* The Raw YouTube IFrame Wrapper */}
-            <div className={`absolute inset-0 w-full h-full pointer-events-none transition-opacity duration-700 ${isPlaying ? 'opacity-100' : 'opacity-0'}`}>
-              <div className="w-full h-full transform scale-[1.2]">
-                {/* The YouTube API will target this empty div and replace it with the <iframe> */}
-                <div ref={playerDivRef} className="w-full h-full" />
+            <div className="absolute inset-0 w-full h-full pointer-events-none bg-black">
+              {/* THE DEEP CROP: 
+                  We make the iframe 150% of the container size and center it.
+                  This permanently forces YouTube's Title, Avatar, and Watch Later buttons
+                  outside the visible bounds of your overflow-hidden parent. */}
+              <div className="absolute top-1/2 left-1/2 w-[150%] h-[150%] -translate-x-1/2 -translate-y-1/2">
+                <div ref={playerDivRef} className="w-full h-full pointer-events-none" />
               </div>
             </div>
 
             {/* Subtle Black Overlay to make text pop when paused */}
             <div className={`absolute inset-0 bg-black/50 pointer-events-none transition-opacity duration-500 z-10 ${isPlaying ? 'opacity-0' : 'opacity-100'}`}></div>
 
-            {/* VERVE Overlay Text & Big Play Button (Visible when paused) */}
+            {/* Big Play Button (Visible when paused) */}
             <div className={`absolute inset-0 flex items-center justify-center z-20 transition-opacity duration-500 ${isPlaying ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'}`}>
-              
-              {/* VERVE Text
-              <h3
-                ref={verveTextRef}
-                className="absolute text-[clamp(1.5rem,8vw,10rem)] font-black text-white/50 tracking-tighter uppercase stroke-text pointer-events-none"
-              >
-                VERVE
-              </h3> */}
-
-              {/* Big Center Play Button */}
-              <button 
+              <button
                 onClick={handlePlayPause}
                 disabled={!isReady || isTransitioning}
                 className={`relative z-30 w-[clamp(3rem,8vw,4rem)] h-[clamp(3rem,8vw,4rem)] rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 transition-all duration-300 ${isReady ? 'hover:bg-white/20 hover:scale-110 cursor-pointer' : 'opacity-50 cursor-wait'}`}
@@ -294,7 +326,7 @@ export default function HomePage() {
 
             {/* Custom Bottom Media Controls (Visible when playing) */}
             <div className={`absolute bottom-0 left-0 w-full bg-gradient-to-t from-black/80 to-transparent p-[clamp(1rem,2vw,1.5rem)] flex items-center gap-[clamp(0.75rem,2vw,1.5rem)] z-40 transition-all duration-500 ${isPlaying ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4 pointer-events-none'}`}>
-              
+
               <button onClick={handlePlayPause} disabled={isTransitioning} className="text-white hover:text-red-500 transition-colors cursor-pointer flex-shrink-0">
                 {isPlaying ? <Pause size={20} fill="currentColor" /> : <Play size={20} fill="currentColor" />}
               </button>
